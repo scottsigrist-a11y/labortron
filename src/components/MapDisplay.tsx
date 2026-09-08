@@ -42,145 +42,159 @@ export const MapDisplay: React.FC<MapDisplayProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const initialCenter = currentLocation ? [currentLocation.lat, currentLocation.lng] : [37.7749, -122.4194];
+    let resizeObserver: ResizeObserver | null = null;
 
-    // Create Leaflet map with touch & drag enabled, no zoom control (custom gesture zoom)
-    const map = L.map(mapContainerRef.current, {
-      center: initialCenter as L.LatLngExpression,
-      zoom: zoomLevel,
-      zoomControl: false,
-      attributionControl: true,
-      minZoom: 8, // Max zoom out is 100 miles
-      maxZoom: 19,
-    });
+    try {
+      const initialCenter = currentLocation ? [currentLocation.lat, currentLocation.lng] : [37.7749, -122.4194];
 
-    // Free OpenStreetMap Tiles (No API key, No license required)
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+      // Create Leaflet map with touch & drag enabled, no zoom control (custom gesture zoom)
+      const map = L.map(mapContainerRef.current, {
+        center: initialCenter as L.LatLngExpression,
+        zoom: zoomLevel,
+        zoomControl: false,
+        attributionControl: true,
+        minZoom: 8, // Max zoom out is 100 miles
+        maxZoom: 19,
+      });
 
-    // Feature group for captured scored areas
-    const capturedGroup = L.featureGroup().addTo(map);
-    capturedAreasLayerRef.current = capturedGroup;
+      // Free OpenStreetMap Tiles (No API key, No license required)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
 
-    // Outer thick black outline for the path (matches design stroke-width 14)
-    pathOutlineLayerRef.current = L.polyline([], {
-      color: '#000000',
-      weight: 14,
-      lineCap: 'round',
-      lineJoin: 'round',
-      opacity: 1,
-    }).addTo(map);
+      // Feature group for captured scored areas
+      const capturedGroup = L.featureGroup().addTo(map);
+      capturedAreasLayerRef.current = capturedGroup;
 
-    // Inner vibrant yellow for the path (matches design #fbbf24 stroke-width 10)
-    pathFillLayerRef.current = L.polyline([], {
-      color: '#FBBF24',
-      weight: 10,
-      lineCap: 'round',
-      lineJoin: 'round',
-      opacity: 1,
-    }).addTo(map);
+      // Outer thick black outline for the path (matches design stroke-width 14)
+      pathOutlineLayerRef.current = L.polyline([], {
+        color: '#000000',
+        weight: 14,
+        lineCap: 'round',
+        lineJoin: 'round',
+        opacity: 1,
+      }).addTo(map);
 
-    // Candidate polygon preview layer (shaded region matching design rgba(59, 130, 246, 0.2))
-    candidatePolygonRef.current = L.polygon([], {
-      color: '#3B82F6',
-      weight: 2,
-      dashArray: '5, 5',
-      fillColor: '#3B82F6',
-      fillOpacity: 0.22,
-    }).addTo(map);
+      // Inner vibrant yellow for the path (matches design #fbbf24 stroke-width 10)
+      pathFillLayerRef.current = L.polyline([], {
+        color: '#FBBF24',
+        weight: 10,
+        lineCap: 'round',
+        lineJoin: 'round',
+        opacity: 1,
+      }).addTo(map);
 
-    // Anchor line outline and fill (connects blue dot to device location with dashed blue line)
-    anchorLineOutlineRef.current = L.polyline([], {
-      color: '#000000',
-      weight: 5,
-      lineCap: 'round',
-      opacity: 0.8,
-    }).addTo(map);
+      // Candidate polygon preview layer (shaded region matching design rgba(59, 130, 246, 0.2))
+      candidatePolygonRef.current = L.polygon([], {
+        color: '#3B82F6',
+        weight: 2,
+        dashArray: '5, 5',
+        fillColor: '#3B82F6',
+        fillOpacity: 0.22,
+      }).addTo(map);
 
-    anchorLineFillRef.current = L.polyline([], {
-      color: '#3B82F6',
-      weight: 3,
-      dashArray: '4, 4',
-      lineCap: 'round',
-      opacity: 1,
-    }).addTo(map);
+      // Anchor line outline and fill (connects blue dot to device location with dashed blue line)
+      anchorLineOutlineRef.current = L.polyline([], {
+        color: '#000000',
+        weight: 5,
+        lineCap: 'round',
+        opacity: 0.8,
+      }).addTo(map);
 
-    // User location precision reticle marker (Custom DivIcon from Professional Polish design)
-    const renderReticleHtml = (lat: number, lng: number) => `
-      <div style="display:flex; flex-direction:column; align-items:center; transform:translate(-24px, -24px); pointer-events:none;">
-        <div style="position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:100%; height:2px; background-color:#ef4444;"></div>
-          <div style="position:absolute; height:100%; width:2px; background-color:#ef4444;"></div>
-          <div style="width:32px; height:32px; border:2px solid #ef4444; border-radius:50%; background:rgba(239,68,68,0.08);"></div>
+      anchorLineFillRef.current = L.polyline([], {
+        color: '#3B82F6',
+        weight: 3,
+        dashArray: '4, 4',
+        lineCap: 'round',
+        opacity: 1,
+      }).addTo(map);
+
+      // User location precision reticle marker (Custom DivIcon from Professional Polish design)
+      const renderReticleHtml = (lat: number, lng: number) => `
+        <div style="display:flex; flex-direction:column; align-items:center; transform:translate(-24px, -24px); pointer-events:none;">
+          <div style="position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center;">
+            <div style="position:absolute; width:100%; height:2px; background-color:#ef4444;"></div>
+            <div style="position:absolute; height:100%; width:2px; background-color:#ef4444;"></div>
+            <div style="width:32px; height:32px; border:2px solid #ef4444; border-radius:50%; background:rgba(239,68,68,0.08);"></div>
+          </div>
+          <div style="margin-top:2px; background:rgba(0,0,0,0.75); color:#ffffff; font-family:monospace; font-size:9px; padding:2px 6px; border-radius:4px; backdrop-filter:blur(4px); white-space:nowrap; border:1px solid rgba(255,255,255,0.15);">
+            LAT: ${lat.toFixed(4)} / LON: ${lng.toFixed(4)}
+          </div>
         </div>
-        <div style="margin-top:2px; background:rgba(0,0,0,0.75); color:#ffffff; font-family:monospace; font-size:9px; padding:2px 6px; border-radius:4px; backdrop-filter:blur(4px); white-space:nowrap; border:1px solid rgba(255,255,255,0.15);">
-          LAT: ${lat.toFixed(4)} / LON: ${lng.toFixed(4)}
-        </div>
-      </div>
-    `;
+      `;
 
-    const userReticleIcon = L.divIcon({
-      className: 'mrbd-reticle-icon',
-      html: renderReticleHtml(initialCenter[0], initialCenter[1]),
-      iconSize: [48, 48],
-      iconAnchor: [24, 24],
-    });
+      const userReticleIcon = L.divIcon({
+        className: 'mrbd-reticle-icon',
+        html: renderReticleHtml(initialCenter[0], initialCenter[1]),
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+      });
 
-    userMarkerRef.current = L.marker(initialCenter as L.LatLngExpression, {
-      icon: userReticleIcon,
-      zIndexOffset: 900,
-    }) as unknown as L.CircleMarker;
-    (userMarkerRef.current as any).addTo(map);
+      userMarkerRef.current = L.marker(initialCenter as L.LatLngExpression, {
+        icon: userReticleIcon,
+        zIndexOffset: 900,
+      }) as unknown as L.CircleMarker;
+      (userMarkerRef.current as any).addTo(map);
 
-    // Blue dot with black outline marker (Custom DivIcon matching design r=10 fill=black, r=7 fill=#3b82f6)
-    const blueDotIcon = L.divIcon({
-      className: 'mrbd-blue-dot-icon',
-      html: `
-        <div style="
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background-color: #3B82F6;
-          border: 3px solid #000000;
-          box-shadow: 0 0 8px rgba(59,130,246,0.5);
-          box-sizing: border-box;
-          transform: translate(-10px, -10px);
-        "></div>
-      `,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
-    });
+      // Blue dot with black outline marker (Custom DivIcon matching design r=10 fill=black, r=7 fill=#3b82f6)
+      const blueDotIcon = L.divIcon({
+        className: 'mrbd-blue-dot-icon',
+        html: `
+          <div style="
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #3B82F6;
+            border: 3px solid #000000;
+            box-shadow: 0 0 8px rgba(59,130,246,0.5);
+            box-sizing: border-box;
+            transform: translate(-10px, -10px);
+          "></div>
+        `,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
 
-    blueDotMarkerRef.current = L.marker(initialCenter as L.LatLngExpression, {
-      icon: blueDotIcon,
-      zIndexOffset: 1000,
-    }).addTo(map);
+      blueDotMarkerRef.current = L.marker(initialCenter as L.LatLngExpression, {
+        icon: blueDotIcon,
+        zIndexOffset: 1000,
+      }).addTo(map);
 
-    mapRef.current = map;
-    if (onMapReady) {
-      onMapReady(map);
-    }
-
-    // Resize observer to ensure map tiles & center adapt dynamically to viewport / orientation
-    const resizeObserver = new ResizeObserver(() => {
-      if (mapRef.current) {
-        mapRef.current.invalidateSize();
-        if (currentLocation) {
-          mapRef.current.panTo([currentLocation.lat, currentLocation.lng], { animate: false });
-        }
+      mapRef.current = map;
+      if (onMapReady) {
+        onMapReady(map);
       }
-    });
 
-    if (mapContainerRef.current) {
-      resizeObserver.observe(mapContainerRef.current);
+      // Resize observer to ensure map tiles & center adapt dynamically to viewport / orientation
+      resizeObserver = new ResizeObserver(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+          if (currentLocation) {
+            mapRef.current.panTo([currentLocation.lat, currentLocation.lng], { animate: false });
+          }
+        }
+      });
+
+      if (mapContainerRef.current) {
+        resizeObserver.observe(mapContainerRef.current);
+      }
+    } catch (e) {
+      console.error('Leaflet initialization failed:', e);
     }
 
     return () => {
-      resizeObserver.disconnect();
-      map.remove();
-      mapRef.current = null;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (mapRef.current) {
+        try {
+          mapRef.current.remove();
+        } catch {
+          // ignore
+        }
+        mapRef.current = null;
+      }
     };
   }, []);
 

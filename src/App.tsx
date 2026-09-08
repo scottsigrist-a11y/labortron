@@ -68,50 +68,65 @@ export default function App() {
     }
 
     let initialResolved = false;
+    let watchId: number | null = null;
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newCoord: LatLng = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const newCoord: LatLng = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
 
-        setCurrentLocation(newCoord);
-        setGpsStatus('active');
+          setCurrentLocation(newCoord);
+          setGpsStatus('active');
 
-        setPathPoints((prev) => {
-          if (prev.length === 0) {
-            return [newCoord];
+          setPathPoints((prev) => {
+            if (prev.length === 0) {
+              return [newCoord];
+            }
+            const lastPoint = prev[prev.length - 1];
+            // Filter tiny GPS jitter (< 3 meters / ~0.0018 miles)
+            const distMiles = haversineDistanceMiles(lastPoint, newCoord);
+            if (distMiles > 0.0015) {
+              return [...prev, newCoord];
+            }
+            return prev;
+          });
+
+          initialResolved = true;
+        },
+        (err) => {
+          console.warn('Geolocation notice:', err.message);
+          if (!initialResolved) {
+            setGpsStatus('denied');
+            const fallback = { lat: 37.7749, lng: -122.4194 };
+            setCurrentLocation(fallback);
+            setPathPoints([fallback]);
           }
-          const lastPoint = prev[prev.length - 1];
-          // Filter tiny GPS jitter (< 3 meters / ~0.0018 miles)
-          const distMiles = haversineDistanceMiles(lastPoint, newCoord);
-          if (distMiles > 0.0015) {
-            return [...prev, newCoord];
-          }
-          return prev;
-        });
-
-        initialResolved = true;
-      },
-      (err) => {
-        console.warn('Geolocation notice:', err.message);
-        if (!initialResolved) {
-          setGpsStatus('denied');
-          const fallback = { lat: 37.7749, lng: -122.4194 };
-          setCurrentLocation(fallback);
-          setPathPoints([fallback]);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 10000,
         }
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 10000,
-      }
-    );
+      );
+    } catch (err) {
+      console.warn('Geolocation blocked or not permitted in current context:', err);
+      setGpsStatus('denied');
+      const fallback = { lat: 37.7749, lng: -122.4194 };
+      setCurrentLocation(fallback);
+      setPathPoints([fallback]);
+    }
 
     return () => {
-      navigator.geolocation.clearWatch(watchId);
+      if (watchId !== null) {
+        try {
+          navigator.geolocation.clearWatch(watchId);
+        } catch {
+          // ignore
+        }
+      }
     };
   }, []);
 
