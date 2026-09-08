@@ -1,0 +1,6 @@
+{
+  "name": "MRBD Path Tracker",
+  "description": "Meta Ray-Ban Display GPS path tracking and territory area scoring game with no-license OpenStreetMap mapping.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
