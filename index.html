@@ -2,28 +2,39 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=600, height=600, initial-scale=1.0, user-scalable=no" />
     <title>MRBD Path Tracker</title>
-    <meta name="description" content="Meta Ray-Ban Display GPS path tracking and territory area scoring game with no-license OpenStreetMap mapping." />
+    <meta name="description" content="Meta Ray-Ban Display Flash Element Tower Defense game with 600x600 fixed viewport, D-pad flow, and temple swipe controls." />
     <meta property="og:title" content="MRBD Path Tracker" />
-    <meta property="og:description" content="Meta Ray-Ban Display GPS path tracking and territory area scoring game with no-license OpenStreetMap mapping." />
+    <meta property="og:description" content="Meta Ray-Ban Display Flash Element Tower Defense game with 600x600 fixed viewport, D-pad flow, and temple swipe controls." />
     <meta property="og:type" content="website" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mrbd-app" content="true" />
     <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      html, body {
+        width: 600px;
+        height: 600px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000000 !important;
+        color: #ffffff;
+      }
+      #root {
+        width: 600px;
+        height: 600px;
+        overflow: hidden;
+        position: relative;
+        background-color: #000000 !important;
+      }
+    </style>
   </head>
   <body class="bg-black text-white antialiased overflow-hidden select-none">
     <div id="root"></div>
-    <script>
-      // Fallback for static hosts (Herald, GitHub Pages) serving repo root without a build step
-      if (typeof window !== 'undefined' && !location.pathname.includes('/dist/') && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-        window.addEventListener('error', function(e) {
-          if (e.target && e.target.tagName === 'SCRIPT' && e.target.src && e.target.src.indexOf('main.tsx') !== -1) {
-            console.warn('Static host cannot parse raw TSX. Redirecting to compiled /dist/ bundle...');
-            var base = location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
-            location.replace(base + '/dist/');
-          }
-        }, true);
-      }
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

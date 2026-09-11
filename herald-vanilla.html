@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=600, height=600, initial-scale=1.0, user-scalable=no" />
+  <title>MRBD Path Tracker</title>
+  <link rel="stylesheet" href="/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="/leaflet.js"></script>
+  <script>
+    if (!window.L) {
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""><\/script>');
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 600px; height: 600px;
+      background-color: #000000 !important;
+      color: #ffffff;
+      font-family: monospace, -apple-system, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #map {
+      width: 600px; height: 600px;
+      background-color: #020617 !important;
+      position: absolute; top: 0; left: 0; z-index: 1;
+    }
+    .leaflet-tile {
+      opacity: 0.92 !important;
+    }
+    .leaflet-container { background: #020617 !important; }
+    .leaflet-control-container { display: none !important; }
+
+    /* Tactical Optical HUD for Meta Ray-Ban Display */
+    .hud-layer {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none; z-index: 10;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 10px;
+    }
+    .hud-top {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+    }
+    .hud-card {
+      background: rgba(0, 0, 0, 0.88);
+      border: 1.5px solid #38bdf8;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #38bdf8;
+      letter-spacing: 0.05em;
+      box-shadow: 0 0 10px rgba(0,0,0,0.8);
+    }
+    .score-card {
+      border-color: #10b981;
+      color: #10b981;
+      text-align: right;
+    }
+    .score-val {
+      font-size: 20px; font-weight: bold; line-height: 1.1;
+    }
+    .banner-notification {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.92);
+      border: 2px solid #10b981;
+      color: #10b981;
+      font-weight: bold;
+      font-size: 13px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      letter-spacing: 0.08em;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
+      transition: opacity 0.25s ease;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 30;
+      text-align: center;
+    }
+    .hud-bottom {
+      display: flex; flex-direction: column; gap: 6px; width: 100%;
+    }
+    .controls-dock {
+      pointer-events: auto;
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center;
+      background: rgba(0, 0, 0, 0.9);
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      box-shadow: 0 0 15px rgba(0,0,0,0.8);
+    }
+    .ctrl-btn {
+      cursor: pointer;
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 10px;
+      padding: 5px 9px;
+      border-radius: 5px;
+      border: 1px solid #38bdf8;
+      background: #0f172a;
+      color: #38bdf8;
+      transition: all 0.15s ease;
+      outline: none;
+      user-select: none;
+    }
+    .ctrl-btn:hover {
+      filter: brightness(1.2);
+    }
+    .ctrl-btn:active {
+      transform: scale(0.95);
+    }
+    .ctrl-btn-action {
+      background: #064e3b;
+      border: 2px solid #10b981;
+      color: #34d399;
+      font-weight: 900;
+      padding: 6px 13px;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+    .ctrl-btn-undo {
+      background: #1e1b4b;
+      border: 1px solid #818cf8;
+      color: #a5b4fc;
+    }
+    .ctrl-btn-reset {
+      background: #450a0a;
+      border: 1px solid #f43f5e;
+      color: #fda4af;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- HUD Interface Layer with Tactical Controls Dock -->
+  <div class="hud-layer">
+    <div class="hud-top">
+      <div class="hud-card">
+        <div style="font-weight:bold; color:#facc15;">WALKTRON MRBD</div>
+        <div id="gps-status" style="font-size:9px; color:#10b981; margin-top:2px;">GPS: ACQUIRING</div>
+        <div id="coords" style="font-size:9px; color:#cbd5e1; margin-top:1px;">--.-----, --.-----</div>
+      </div>
+
+      <div class="hud-card score-card">
+        <div style="font-size:9px;">CLAIMED TERRITORY</div>
+        <div id="score" class="score-val">0.000 mi²</div>
+        <div id="capture-count" style="font-size:9px; color:#94a3b8;">0 CAPTURES</div>
+      </div>
+    </div>
+
+    <!-- Center Banner Notification -->
+    <div id="banner" class="banner-notification">AREA CAPTURED!</div>
+
+    <div class="hud-bottom">
+      <div class="controls-dock">
+        <button type="button" class="ctrl-btn" onclick="map.zoomIn(); playBeep(750, 0.03);" title="Zoom In">[+] ZOOM</button>
+        <button type="button" class="ctrl-btn" onclick="map.zoomOut(); playBeep(650, 0.03);" title="Zoom Out">[-] ZOOM</button>
+        <button type="button" class="ctrl-btn" onclick="handleDpadRecenter();" title="Recenter">[📍] RECENTER</button>
+        <button type="button" class="ctrl-btn ctrl-btn-action" onclick="handleDpadSelect();" title="Enclose and claim polygon">[⭐] ENCLOSE & SCORE</button>
+        <button type="button" class="ctrl-btn ctrl-btn-undo" onclick="handleUndo();" title="Undo last node">[↩] UNDO</button>
+        <button type="button" class="ctrl-btn ctrl-btn-reset" onclick="handleDpadReset();" title="Reset all territories">[🗑] RESET</button>
+      </div>
+      <div id="waypoints-info" style="font-size:9px; color:#94a3b8; text-align:right; font-family:monospace; margin-right:4px;">
+        0 PATH NODES • OPENSTREETMAP
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Audio synthesizer for audio feedback without sound assets
+    var audioCtx = null;
+    function playBeep(freq, duration, type) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq || 880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (duration || 0.1));
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (duration || 0.1));
+      } catch(e) {}
+    }
+
+    function playSuccessChime() {
+      playBeep(523.25, 0.08, 'triangle');
+      setTimeout(function() { playBeep(659.25, 0.08, 'triangle'); }, 90);
+      setTimeout(function() { playBeep(783.99, 0.18, 'triangle'); }, 180);
+      setTimeout(function() { playBeep(1046.50, 0.25, 'triangle'); }, 270);
+    }
+
+    // State Variables
+    var userLat = null, userLng = null;
+    var isGpsCentered = true;
+    var hasInitialFix = false;
+    var pathCoords = [];
+    var totalScoreSqMi = 0;
+    var captureCount = 0;
+    var currentBlueDotPos = null;
+    var currentBlueDotIndexFraction = 0;
+
+    // Initialize Map centered on null (will position on first real GPS point)
+    var map = L.map('map', {
+      center: [37.7749, -122.4194],
+      zoom: 18,
+      zoomControl: false,
+      attributionControl: false
+    });
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    // Layer Groups
+    var capturedPolygonsGroup = L.layerGroup().addTo(map);
+
+    // User's walked path
+    var pathLine = L.polyline([], {
+      color: '#facc15',
+      weight: 5,
+      opacity: 0.95,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
+
+    // Dynamic closing line connecting user to the moving blue dot
+    var closingLine = L.polyline([], {
+      color: '#38bdf8',
+      weight: 3,
+      dashArray: '5, 5',
+      opacity: 0.95
+    }).addTo(map);
+
+    // Blue Dot Marker (moves back & forth along the user's walked path)
+    var blueDotIcon = L.divIcon({
+      className: 'blue-dot-marker',
+      html: '<div style="position:relative; width:22px; height:22px;">' +
+            '<div style="position:absolute; width:22px; height:22px; border-radius:50%; background:#38bdf8; opacity:0.45; animation:pulseRing 1.5s infinite linear;"></div>' +
+            '<div style="position:absolute; top:4px; left:4px; width:14px; height:14px; border-radius:50%; background:#0284c7; border:2.5px solid #ffffff; box-shadow:0 0 12px #38bdf8;"></div>' +
+            '</div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11]
+    });
+    var blueDotMarker = L.marker([0, 0], { icon: blueDotIcon, zIndexOffset: 1000 });
+
+    // User Marker (Green reticle with white rim)
+    var userIcon = L.divIcon({
+      className: 'user-marker',
+      html: '<div style="width:20px; height:20px; border-radius:50%; background:#10b981; border:3px solid #ffffff; box-shadow:0 0 12px #10b981;"></div>',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+    var userMarker = L.marker([0, 0], { icon: userIcon, zIndexOffset: 2000 });
+
+    // Calculate Spherical Polygon Area in Square Miles using Shoelace
+    function calculateAreaSqMiles(coords) {
+      if (coords.length < 3) return 0;
+      var avgLat = 0;
+      for (var i = 0; i < coords.length; i++) avgLat += coords[i][0];
+      avgLat /= coords.length;
+      var radLat = (avgLat * Math.PI) / 180;
+      var cosLat = Math.cos(radLat);
+      var latMilesPerDeg = 69.0;
+      var lngMilesPerDeg = 69.17 * cosLat;
+
+      var area = 0;
+      for (var i = 0; i < coords.length; i++) {
+        var j = (i + 1) % coords.length;
+        var xi = coords[i][1] * lngMilesPerDeg;
+        var yi = coords[i][0] * latMilesPerDeg;
+        var xj = coords[j][1] * lngMilesPerDeg;
+        var yj = coords[j][0] * latMilesPerDeg;
+        area += xi * yj - xj * yi;
+      }
+      return Math.abs(area) / 2;
+    }
+
+    // Interpolate coordinate along the path
+    function interpolateAlongPath(fraction) {
+      if (pathCoords.length === 0) return [userLat, userLng];
+      if (pathCoords.length === 1) return pathCoords[0];
+      var totalSegments = pathCoords.length - 1;
+      var scaled = fraction * totalSegments;
+      var segIndex = Math.min(Math.floor(scaled), totalSegments - 1);
+      var segFraction = scaled - segIndex;
+
+      var p1 = pathCoords[segIndex];
+      var p2 = pathCoords[segIndex + 1];
+
+      return [
+        p1[0] + (p2[0] - p1[0]) * segFraction,
+        p1[1] + (p2[1] - p1[1]) * segFraction
+      ];
+    }
+
+    // Animate Blue Dot along the walked path
+    var cycleDuration = 6000;
+    var startTime = performance.now();
+
+    function animateBlueDot(now) {
+      if (isGpsCentered && pathCoords.length >= 2) {
+        var elapsed = now - startTime;
+        var progress = (elapsed % cycleDuration) / cycleDuration;
+        var wave = progress <= 0.5 ? progress * 2 : 2 - progress * 2;
+        currentBlueDotIndexFraction = wave;
+        currentBlueDotPos = interpolateAlongPath(wave);
+
+        blueDotMarker.setLatLng(currentBlueDotPos);
+        if (!map.hasLayer(blueDotMarker)) blueDotMarker.addTo(map);
+
+        // Update active dashed line between user & blue dot
+        if (userLat && userLng) {
+          closingLine.setLatLngs([[userLat, userLng], currentBlueDotPos]);
+        }
+      } else if (isGpsCentered && pathCoords.length === 1) {
+        currentBlueDotPos = pathCoords[0];
+        blueDotMarker.setLatLng(currentBlueDotPos);
+        if (!map.hasLayer(blueDotMarker)) blueDotMarker.addTo(map);
+      }
+      requestAnimationFrame(animateBlueDot);
+    }
+    requestAnimationFrame(animateBlueDot);
+
+    // Banner display
+    var bannerTimeout = null;
+    function showBanner(text) {
+      var b = document.getElementById('banner');
+      b.textContent = text;
+      b.style.opacity = '1';
+      if (bannerTimeout) clearTimeout(bannerTimeout);
+      bannerTimeout = setTimeout(function() {
+        b.style.opacity = '0';
+      }, 2200);
+    }
+
+    // Force proceed with coarse fix if user chooses to proceed
+    function forceProceedCoarse() {
+      if (userLat && userLng) {
+        isGpsCentered = true;
+        var lockScreen = document.getElementById('gps-lock-screen');
+        if (lockScreen) lockScreen.style.display = 'none';
+        map.setView([userLat, userLng], 17);
+        userMarker.setLatLng([userLat, userLng]).addTo(map);
+        pathCoords = [[userLat, userLng]];
+        pathLine.setLatLngs(pathCoords);
+        document.getElementById('waypoints-info').textContent = '1 PATH NODE';
+        playSuccessChime();
+        showBanner('COARSE FIX ACCEPTED');
+      }
+    }
+
+    // Step 1: GPS Lock & Center Handler
+    function onGpsFixAcquired(lat, lng, accuracy) {
+      userLat = lat;
+      userLng = lng;
+
+      var isAccurate = typeof accuracy === 'number' ? accuracy <= 100 : true;
+
+      // Update HUD
+      document.getElementById('coords').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5) + (accuracy ? ' (±' + Math.round(accuracy) + 'm)' : '');
+      document.getElementById('gps-status').textContent = isAccurate
+        ? 'GPS LOCKED (±' + Math.round(accuracy || 5) + 'm)'
+        : 'COARSE FIX (±' + Math.round(accuracy) + 'm)';
+
+      // Initial location fix handler
+      if (!hasInitialFix) {
+        hasInitialFix = true;
+        map.setView([lat, lng], 18);
+        userMarker.setLatLng([lat, lng]).addTo(map);
+        pathCoords = [[lat, lng]];
+        pathLine.setLatLngs(pathCoords);
+        var wp = document.getElementById('waypoints-info');
+        if (wp) wp.textContent = '1 PATH NODE';
+
+        playSuccessChime();
+        showBanner(isAccurate ? 'GPS LOCKED - WALK TO DRAW TRAIL' : 'LOCATION ACQUIRED');
+        return;
+      }
+
+      // Subsequent GPS movements: append to path
+      userMarker.setLatLng([lat, lng]);
+      if (pathCoords.length === 0) {
+        pathCoords = [[lat, lng]];
+        pathLine.setLatLngs(pathCoords);
+        return;
+      }
+      var last = pathCoords[pathCoords.length - 1];
+      var dLat = Math.abs(last[0] - lat);
+      var dLng = Math.abs(last[1] - lng);
+
+      // Add to path if moved more than 2.5 meters (~0.000025 deg)
+      if (dLat > 0.000025 || dLng > 0.000025) {
+        pathCoords.push([lat, lng]);
+        pathLine.setLatLngs(pathCoords);
+        var wpNodes = document.getElementById('waypoints-info');
+        if (wpNodes) wpNodes.textContent = pathCoords.length + ' PATH NODES';
+        playBeep(920, 0.04);
+      }
+    }
+
+    // Step 2: D-Pad Select / Enter Action
+    // When user hits Enter/Select: line drawn from user to blue dot, area filled in, score calculated
+    function handleDpadSelect() {
+      if (pathCoords.length < 2 || !currentBlueDotPos) {
+        showBanner('WALK MORE TO EXPAND TRAIL');
+        playBeep(350, 0.08);
+        return;
+      }
+
+      var userPos = [userLat, userLng];
+      var dotPos = [currentBlueDotPos[0], currentBlueDotPos[1]];
+
+      // Construct enclosed polygon points: User -> Blue Dot -> Path Waypoints -> User
+      var totalSegments = pathCoords.length - 1;
+      var dotSegIndex = Math.min(Math.floor(currentBlueDotIndexFraction * totalSegments), totalSegments - 1);
+
+      var polygonPoints = [userPos, dotPos];
+      var userNearestIndex = pathCoords.length - 1;
+
+      if (dotSegIndex <= userNearestIndex) {
+        for (var i = dotSegIndex + 1; i <= userNearestIndex; i++) {
+          polygonPoints.push(pathCoords[i]);
+        }
+      } else {
+        for (var i = dotSegIndex; i >= userNearestIndex; i--) {
+          polygonPoints.push(pathCoords[i]);
+        }
+      }
+
+      // Fill in enclosed area with glowing green territory
+      L.polygon(polygonPoints, {
+        color: '#10b981',
+        fillColor: '#10b981',
+        fillOpacity: 0.4,
+        weight: 2.5
+      }).addTo(capturedPolygonsGroup);
+
+      // Calculate score based on area filled
+      var areaSqMiles = calculateAreaSqMiles(polygonPoints);
+      var scoreEarned = Math.max(0.001, areaSqMiles);
+      totalScoreSqMi += scoreEarned;
+      captureCount++;
+
+      document.getElementById('score').textContent = totalScoreSqMi.toFixed(3) + ' mi²';
+      document.getElementById('capture-count').textContent = captureCount + ' CAPTURES';
+
+      showBanner('✓ +' + scoreEarned.toFixed(3) + ' mi² CAPTURED!');
+      playSuccessChime();
+    }
+
+    // Recenter map on user location
+    function recenterMap() {
+      if (userLat && userLng) {
+        map.setView([userLat, userLng], map.getZoom());
+        showBanner('MAP RECENTERED');
+        playBeep(600, 0.08);
+      }
+    }
+    var handleDpadRecenter = recenterMap;
+
+    // Undo last path node
+    function handleUndo() {
+      if (pathCoords.length <= 1) {
+        pathCoords = [];
+        pathLine.setLatLngs([]);
+        showBanner('TRAIL CLEARED');
+        playBeep(450, 0.08);
+      } else {
+        pathCoords.pop();
+        pathLine.setLatLngs(pathCoords);
+        showBanner('LAST NODE UNDONE');
+        playBeep(550, 0.08);
+      }
+      var wp = document.getElementById('waypoints-info');
+      if (wp) wp.textContent = pathCoords.length + ' PATH NODES • OPENSTREETMAP';
+    }
+
+    // Reset game territories
+    function resetTerritories() {
+      capturedPolygonsGroup.clearLayers();
+      totalScoreSqMi = 0;
+      captureCount = 0;
+      document.getElementById('score').textContent = '0.000 mi²';
+      document.getElementById('capture-count').textContent = '0 CAPTURES';
+      if (userLat && userLng) {
+        pathCoords = [[userLat, userLng]];
+        pathLine.setLatLngs(pathCoords);
+        var wp = document.getElementById('waypoints-info');
+        if (wp) wp.textContent = '1 PATH NODE • OPENSTREETMAP';
+      }
+      showBanner('TERRITORIES RESET');
+      playBeep(440, 0.12);
+    }
+    var handleDpadReset = resetTerritories;
+
+    // Geolocation Engine
+    function startGeolocation(isUserGesture) {
+      if (!navigator.geolocation) {
+        showBanner('GEOLOCATION NOT SUPPORTED');
+        var gpsStat = document.getElementById('gps-status');
+        if (gpsStat) gpsStat.textContent = 'NO GEOLOCATION';
+        return;
+      }
+
+      if (isUserGesture) {
+        showBanner('REQUESTING GPS...');
+        playBeep(880, 0.08);
+      }
+
+      // Fast immediate position
+      navigator.geolocation.getCurrentPosition(
+        function(pos) {
+          onGpsFixAcquired(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+        },
+        function(err) {
+          console.warn('MRBD Geolocation err:', err);
+          var gpsStat = document.getElementById('gps-status');
+          if (err.code === 1) {
+            showBanner('GPS PERMISSION NEEDED');
+            if (gpsStat) gpsStat.textContent = 'PERMISSION REQUIRED';
+            playBeep(350, 0.2);
+          } else if (err.code === 2) {
+            showBanner('GPS UNAVAILABLE');
+            if (gpsStat) gpsStat.textContent = 'GPS UNAVAILABLE';
+            playBeep(350, 0.2);
+          } else if (err.code === 3) {
+            showBanner('GPS TIMED OUT');
+            if (gpsStat) gpsStat.textContent = 'GPS TIMED OUT';
+            playBeep(350, 0.2);
+          } else {
+            showBanner('GPS ERROR');
+            if (gpsStat) gpsStat.textContent = 'GPS ERROR';
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+
+      // Continuous watcher
+      try {
+        navigator.geolocation.watchPosition(
+          function(pos) {
+            onGpsFixAcquired(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+          },
+          function(err) {
+            console.warn('Watch GPS err:', err);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        );
+      } catch(e) {}
+    }
+
+    startGeolocation(false);
+
+    // 100% STRICT D-PAD CONTROLS FOR META RAY-BAN GLASSES
+    // Handles Keyboard Arrow/Enter keys and window postMessage bridge from Herald
+    window.addEventListener('keydown', function(e) {
+      switch(e.key) {
+        case 'Enter':
+        case ' ':
+          handleDpadSelect();
+          break;
+        case 'ArrowUp':
+          map.zoomIn();
+          playBeep(750, 0.03);
+          break;
+        case 'ArrowDown':
+          if (!isGpsCentered && userLat && userLng) {
+            forceProceedCoarse();
+          } else {
+            map.zoomOut();
+            playBeep(650, 0.03);
+          }
+          break;
+        case 'ArrowRight':
+          recenterMap();
+          break;
+        case 'ArrowLeft':
+          resetTerritories();
+          break;
+        case 'Backspace':
+        case 'Delete':
+          handleUndo();
+          break;
+      }
+    });
+
+    // Herald / Meta Ray-Ban PostMessage Bridge
+    window.addEventListener('message', function(event) {
+      if (!event.data) return;
+      var d = event.data;
+
+      // Coordinate injection from bridge if available
+      if (d.lat && d.lng) {
+        onGpsFixAcquired(d.lat, d.lng, d.accuracy);
+        return;
+      }
+      if (d.coords && d.coords.latitude) {
+        onGpsFixAcquired(d.coords.latitude, d.coords.longitude, d.coords.accuracy);
+        return;
+      }
+
+      var action = (typeof d === 'string') ? d : (d.action || d.direction || d.key || d.button || '');
+      action = action.toLowerCase();
+
+      if (action.includes('enter') || action.includes('select') || action.includes('center') || action.includes('tap')) {
+        handleDpadSelect();
+      } else if (action.includes('up') || action.includes('forward')) {
+        map.zoomIn();
+      } else if (action.includes('down') || action.includes('back')) {
+        map.zoomOut();
+      } else if (action.includes('right')) {
+        recenterMap();
+      } else if (action.includes('left') || action.includes('reset')) {
+        resetTerritories();
+      } else if (action.includes('undo') || action.includes('backspace')) {
+        handleUndo();
+      }
+    });
+  </script>
+</body>
+</html>

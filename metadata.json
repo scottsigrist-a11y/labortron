@@ -1,6 +1,6 @@
 {
   "name": "MRBD Path Tracker",
-  "description": "Meta Ray-Ban Display GPS path tracking and territory area scoring game with no-license OpenStreetMap mapping.",
-  "requestFramePermissions": ["geolocation"],
+  "description": "Meta Ray-Ban Display Flash Element Tower Defense game with 600x600 fixed viewport, D-pad flow, and temple swipe controls.",
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
